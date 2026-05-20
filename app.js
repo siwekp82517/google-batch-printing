@@ -1,5 +1,5 @@
 const App = (() => {
-  const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+  const SCOPES = 'https://www.googleapis.com/auth/drive.readonly openid profile email';
   const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 
   let tokenClient = null;
@@ -40,11 +40,6 @@ const App = (() => {
     if (!accessToken) throw new Error('Not authenticated');
     const headers = { ...options.headers, Authorization: `Bearer ${accessToken}` };
     let response = await fetch(url, { ...options, headers });
-    if (response.status === 401) {
-      await refreshToken();
-      headers.Authorization = `Bearer ${accessToken}`;
-      response = await fetch(url, { ...options, headers });
-    }
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error?.message || `HTTP ${response.status}`);
@@ -52,16 +47,6 @@ const App = (() => {
     return response;
   }
 
-  function refreshToken() {
-    return new Promise((resolve, reject) => {
-      tokenClient.callback = (resp) => {
-        if (resp.error) return reject(resp);
-        accessToken = resp.access_token;
-        resolve();
-      };
-      tokenClient.requestAccessToken({ prompt: '' });
-    });
-  }
 
   function initAuth() {
     if (typeof google === 'undefined' || !google.accounts) {
