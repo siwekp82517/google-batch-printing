@@ -19,6 +19,54 @@ const App = (() => {
 
   const FOLDER_ICON = `<svg viewBox="0 0 24 24"><path fill="#5f6368" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>`;
   const PDF_ICON = `<svg viewBox="0 0 24 24"><path fill="#d93025" d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8v2h12v12h2V4c0-1.1-.9-2-2-2z"/></svg>`;
+  const DOC_ICON = `<svg viewBox="0 0 24 24"><path fill="#4285f4" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+  const SHEET_ICON = `<svg viewBox="0 0 24 24"><path fill="#0f9d58" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm-2 14H8v-2h4v2zm0-4H8v-2h4v2zm0-4H8V6h4v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+  const SLIDE_ICON = `<svg viewBox="0 0 24 24"><path fill="#f4b400" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm-1 12H7v-2h6v2zm0-4H7V8h6v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm-3-5V3.5L18.5 9H14z"/></svg>`;
+  const FILE_ICON = `<svg viewBox="0 0 24 24"><path fill="#5f6368" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>`;
+
+  const GOOGLE_DOC = 'application/vnd.google-apps.document';
+  const GOOGLE_SHEET = 'application/vnd.google-apps.spreadsheet';
+  const GOOGLE_SLIDE = 'application/vnd.google-apps.presentation';
+  const GOOGLE_DRAWING = 'application/vnd.google-apps.drawing';
+  const PDF = 'application/pdf';
+  const FOLDER = 'application/vnd.google-apps.folder';
+  const EXPORTABLE = [GOOGLE_DOC, GOOGLE_SHEET, GOOGLE_SLIDE, GOOGLE_DRAWING];
+  const OFFICE_TYPES = [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/msword',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-powerpoint',
+  ];
+
+  function isPrintable(mimeType) {
+    return mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
+  }
+
+  function getFileIcon(mimeType) {
+    if (mimeType === PDF) return PDF_ICON;
+    if (mimeType === GOOGLE_DOC) return DOC_ICON;
+    if (mimeType === GOOGLE_SHEET) return SHEET_ICON;
+    if (mimeType === GOOGLE_SLIDE) return SLIDE_ICON;
+    if (EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType)) return DOC_ICON;
+    return FILE_ICON;
+  }
+
+  function getFileTypeLabel(mimeType) {
+    if (mimeType === PDF) return 'PDF';
+    if (mimeType === GOOGLE_DOC) return 'Google Doc';
+    if (mimeType === GOOGLE_SHEET) return 'Google Sheet';
+    if (mimeType === GOOGLE_SLIDE) return 'Google Slide';
+    if (mimeType === GOOGLE_DRAWING) return 'Google Drawing';
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'Word Document';
+    if (mimeType === 'application/msword') return 'Word Document';
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'Excel Spreadsheet';
+    if (mimeType === 'application/vnd.ms-excel') return 'Excel Spreadsheet';
+    if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return 'PowerPoint';
+    if (mimeType === 'application/vnd.ms-powerpoint') return 'PowerPoint';
+    return 'Document';
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -127,15 +175,21 @@ const App = (() => {
       const data = await resp.json();
       return (data.files || []).map(f => ({
         ...f,
-        isFolder: f.mimeType === 'application/vnd.google-apps.folder',
-        isPdf: f.mimeType === 'application/pdf',
+        isFolder: f.mimeType === FOLDER,
+        isPrintable: isPrintable(f.mimeType),
       }));
     } finally {
       $('loading-state').classList.add('hidden');
     }
   }
 
-  async function downloadFile(fileId) {
+  async function downloadFile(fileId, mimeType) {
+    if (EXPORTABLE.includes(mimeType)) {
+      const resp = await fetchWithAuth(
+        `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
+      );
+      return resp.blob();
+    }
     const resp = await fetchWithAuth(`${DRIVE_API}/files/${fileId}?alt=media`);
     return resp.blob();
   }
@@ -203,13 +257,16 @@ const App = (() => {
           </div>
         </div>`;
       }
-      if (f.isPdf) {
+      if (f.isPrintable) {
         const checked = state.selectedIds.has(f.id) ? 'checked' : '';
+        const icon = getFileIcon(f.mimeType);
+        const typeLabel = getFileTypeLabel(f.mimeType);
+        const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
         return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}">
-          <div class="file-icon">${PDF_ICON}</div>
+          <div class="file-icon">${icon}</div>
           <div class="file-details">
             <div class="file-name" title="${f.name}">${f.name}</div>
-            <div class="file-meta">${formatSize(f.size)} &middot; ${formatDate(f.modifiedTime)}</div>
+            <div class="file-meta">${typeLabel}${sizeStr} &middot; ${formatDate(f.modifiedTime)}</div>
           </div>
           <div class="file-checkbox" onclick="event.stopPropagation()">
             <input type="checkbox" ${checked} onchange="App.toggleFile('${f.id}')">
@@ -240,22 +297,22 @@ const App = (() => {
   }
 
   function toggleSelectAll() {
-    const pdfs = state.filteredFiles.filter(f => f.isPdf);
-    const allSelected = pdfs.length > 0 && pdfs.every(f => state.selectedIds.has(f.id));
+    const printables = state.filteredFiles.filter(f => f.isPrintable);
+    const allSelected = printables.length > 0 && printables.every(f => state.selectedIds.has(f.id));
     if (allSelected) {
-      pdfs.forEach(f => state.selectedIds.delete(f.id));
+      printables.forEach(f => state.selectedIds.delete(f.id));
     } else {
-      pdfs.forEach(f => state.selectedIds.add(f.id));
+      printables.forEach(f => state.selectedIds.add(f.id));
     }
     renderFileList();
     updateSelectionUI();
   }
 
   function updateSelectionUI() {
-    const pdfs = state.filteredFiles.filter(f => f.isPdf);
+    const printables = state.filteredFiles.filter(f => f.isPrintable);
     const count = state.selectedIds.size;
-    const total = pdfs.length;
-    $('selection-count').textContent = count > 0 ? `${count} of ${total} selected` : `${total} PDFs`;
+    const total = printables.length;
+    $('selection-count').textContent = count > 0 ? `${count} of ${total} selected` : `${total} documents`;
     $('print-btn').disabled = count === 0;
     $('print-btn-text').textContent = `Print Selected (${count})`;
     $('select-all').checked = total > 0 && count === total;
@@ -264,10 +321,10 @@ const App = (() => {
   function filterFiles(query) {
     const q = query.toLowerCase().trim();
     if (!q) {
-      state.filteredFiles = state.files.filter(f => f.isFolder || f.isPdf);
+      state.filteredFiles = state.files.filter(f => f.isFolder || f.isPrintable);
     } else {
       state.filteredFiles = state.files.filter(f =>
-        (f.isFolder || f.isPdf) && f.name.toLowerCase().includes(q)
+        (f.isFolder || f.isPrintable) && f.name.toLowerCase().includes(q)
       );
     }
     renderFileList();
@@ -275,10 +332,10 @@ const App = (() => {
   }
 
   async function startBatchPrint() {
-    const pdfs = state.filteredFiles
-      .filter(f => f.isPdf && state.selectedIds.has(f.id));
+    const files = state.filteredFiles
+      .filter(f => f.isPrintable && state.selectedIds.has(f.id));
 
-    if (pdfs.length === 0) return;
+    if (files.length === 0) return;
 
     state.printing = true;
     state.printCancelled = false;
@@ -289,22 +346,22 @@ const App = (() => {
     try {
       const blobs = [];
 
-      for (let i = 0; i < pdfs.length; i++) {
+      for (let i = 0; i < files.length; i++) {
         if (state.printCancelled) { finishPrint(); return; }
-        updateProgress(i, pdfs.length, `Downloading: ${pdfs[i].name}`);
-        const blob = await downloadFile(pdfs[i].id);
-        blobs.push({ blob, name: pdfs[i].name });
+        updateProgress(i, files.length, `Downloading: ${files[i].name}`);
+        const blob = await downloadFile(files[i].id, files[i].mimeType);
+        blobs.push({ blob, name: files[i].name });
       }
 
       if (state.printCancelled) { finishPrint(); return; }
 
-      updateProgress(pdfs.length, pdfs.length, 'Merging PDFs...');
+      updateProgress(files.length, files.length, 'Merging documents...');
       const mergedBlob = await mergePdfs(blobs);
 
       if (state.printCancelled) { finishPrint(); return; }
 
-      updateProgress(pdfs.length, pdfs.length, 'Opening print dialog...');
-      await printPdf(mergedBlob, `${pdfs.length} documents merged`);
+      updateProgress(files.length, files.length, 'Opening print dialog...');
+      await printPdf(mergedBlob, `${files.length} documents merged`);
 
       finishPrint();
     } catch (err) {
