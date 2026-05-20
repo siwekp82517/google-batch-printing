@@ -211,7 +211,7 @@ const App = (() => {
 
     renderBreadcrumbs();
     state.files = await listFiles(folderId);
-    state.filteredFiles = state.files.filter(f => f.isFolder || f.isPdf);
+    state.filteredFiles = state.files.filter(f => f.mimeType === FOLDER || isPrintable(f.mimeType));
     renderFileList();
     updateSelectionUI();
   }
