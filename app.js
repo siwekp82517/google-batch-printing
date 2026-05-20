@@ -186,6 +186,13 @@ const App = (() => {
       return resp.blob();
     }
 
+    if (mimeType === GOOGLE_SHEET) {
+      const resp = await fetchWithAuth(
+        `https://docs.google.com/spreadsheets/d/${fileId}/export?format=pdf&portrait=false&fitw=true&size=A4`
+      );
+      return resp.blob();
+    }
+
     const exportResp = await fetchWithAuth(
       `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
     );
