@@ -337,32 +337,31 @@ const App = (() => {
     return new Promise((resolve) => {
       const iframe = $('print-frame');
       const blobUrl = URL.createObjectURL(blob);
+      let resolved = false;
+
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        window.removeEventListener('focus', onFocus);
+        URL.revokeObjectURL(blobUrl);
+        iframe.src = 'about:blank';
+        resolve();
+      };
+
+      const onFocus = () => {
+        setTimeout(done, 500);
+      };
 
       const onLoad = () => {
         iframe.removeEventListener('load', onLoad);
-        const afterPrintHandler = () => {
-          iframe.contentWindow.removeEventListener('afterprint', afterPrintHandler);
-          URL.revokeObjectURL(blobUrl);
-          iframe.src = 'about:blank';
-          resolve();
-        };
 
         try {
-          iframe.contentWindow.addEventListener('afterprint', afterPrintHandler);
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        } catch {
-          URL.revokeObjectURL(blobUrl);
-          iframe.src = 'about:blank';
-          resolve();
-        }
+          iframe.contentWindow.addEventListener('afterprint', done);
+        } catch {}
 
-        setTimeout(() => {
-          URL.revokeObjectURL(blobUrl);
-          try { iframe.contentWindow.removeEventListener('afterprint', afterPrintHandler); } catch {}
-          iframe.src = 'about:blank';
-          resolve();
-        }, 60000);
+        window.addEventListener('focus', onFocus);
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
       };
 
       iframe.addEventListener('load', onLoad);
