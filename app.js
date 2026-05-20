@@ -181,12 +181,19 @@ const App = (() => {
   }
 
   async function downloadFile(fileId, mimeType) {
-    if (EXPORTABLE.includes(mimeType)) {
-      const resp = await fetchWithAuth(
-        `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
-      );
+    if (mimeType === PDF) {
+      const resp = await fetchWithAuth(`${DRIVE_API}/files/${fileId}?alt=media`);
       return resp.blob();
     }
+
+    const exportResp = await fetchWithAuth(
+      `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
+    );
+    const contentType = exportResp.headers.get('content-type') || '';
+    if (contentType.includes('application/pdf')) {
+      return exportResp.blob();
+    }
+
     const resp = await fetchWithAuth(`${DRIVE_API}/files/${fileId}?alt=media`);
     return resp.blob();
   }
@@ -345,9 +352,17 @@ const App = (() => {
 
       for (let i = 0; i < files.length; i++) {
         if (state.printCancelled) { finishPrint(); return; }
-        updateProgress(i, files.length, `Downloading: ${files[i].name}`);
-        const blob = await downloadFile(files[i].id, files[i].mimeType);
-        blobs.push({ blob, name: files[i].name });
+        updateProgress(i, files.length, `Converting: ${files[i].name}`);
+        try {
+          const blob = await downloadFile(files[i].id, files[i].mimeType);
+          if (blob.type && !blob.type.includes('pdf')) {
+            showToast(`Skipped ${files[i].name}: not a convertible document`, 'warning');
+            continue;
+          }
+          blobs.push({ blob, name: files[i].name });
+        } catch (e) {
+          showToast(`Skipped ${files[i].name}: ${e.message}`, 'warning');
+        }
       }
 
       if (state.printCancelled) { finishPrint(); return; }
@@ -379,7 +394,7 @@ const App = (() => {
         const pages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
         pages.forEach(page => mergedPdf.addPage(page));
       } catch (e) {
-        console.warn(`Skipping corrupt PDF: ${item.name}`, e);
+        console.warn(`Skipping unmergeable file: ${item.name}`, e);
       }
     }
 
