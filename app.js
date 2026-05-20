@@ -41,7 +41,9 @@ const App = (() => {
   ];
 
   function isPrintable(mimeType) {
-    return mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
+    const result = mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
+    console.log('isPrintable check:', mimeType, '→', result);
+    return result;
   }
 
   function getFileIcon(mimeType) {
@@ -173,11 +175,14 @@ const App = (() => {
       const url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=1000`;
       const resp = await fetchWithAuth(url);
       const data = await resp.json();
-      return (data.files || []).map(f => ({
-        ...f,
-        isFolder: f.mimeType === FOLDER,
-        isPrintable: isPrintable(f.mimeType),
-      }));
+      return (data.files || []).map(f => {
+        const printable = isPrintable(f.mimeType);
+        return {
+          ...f,
+          isFolder: f.mimeType === FOLDER,
+          isPrintable: printable,
+        };
+      });
     } finally {
       $('loading-state').classList.add('hidden');
     }
