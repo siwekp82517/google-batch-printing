@@ -41,9 +41,7 @@ const App = (() => {
   ];
 
   function isPrintable(mimeType) {
-    const result = mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
-    console.log('isPrintable check:', mimeType, '→', result);
-    return result;
+    return mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
   }
 
   function getFileIcon(mimeType) {
@@ -107,9 +105,7 @@ const App = (() => {
       client_id: GOOGLE_CLIENT_ID,
       scope: SCOPES,
       callback: (resp) => {
-        console.log('OAuth callback received:', resp);
         if (resp.error) {
-          console.error('OAuth error:', resp.error, resp);
           showToast('Sign-in failed: ' + resp.error, 'error');
           return;
         }
@@ -142,13 +138,10 @@ const App = (() => {
   }
 
   async function onSignedIn() {
-    console.log('onSignedIn called, token:', accessToken ? 'present' : 'missing');
     try {
       const resp = await fetchWithAuth('https://www.googleapis.com/oauth2/v3/userinfo');
       state.user = await resp.json();
-      console.log('User info loaded:', state.user.name);
     } catch (e) {
-      console.error('Failed to load user info:', e);
       state.user = { name: 'User', picture: '' };
     }
     renderUserInfo();
@@ -175,14 +168,13 @@ const App = (() => {
       const url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=1000`;
       const resp = await fetchWithAuth(url);
       const data = await resp.json();
-      return (data.files || []).map(f => {
-        const printable = isPrintable(f.mimeType);
-        return {
-          ...f,
-          isFolder: f.mimeType === FOLDER,
-          isPrintable: printable,
-        };
-      });
+      return (data.files || []).map(f => ({
+        id: f.id,
+        name: f.name,
+        mimeType: f.mimeType,
+        size: f.size,
+        modifiedTime: f.modifiedTime,
+      }));
     } finally {
       $('loading-state').classList.add('hidden');
     }
@@ -242,8 +234,6 @@ const App = (() => {
   function renderFileList() {
     const el = $('file-list');
     const files = state.filteredFiles;
-    console.log('renderFileList called with', files.length, 'files');
-    console.log('Folders:', files.filter(f => f.isFolder).length, 'Printable:', files.filter(f => f.isPrintable).length);
 
     if (files.length === 0) {
       el.classList.add('hidden');
@@ -255,7 +245,7 @@ const App = (() => {
     el.classList.remove('hidden');
 
     el.innerHTML = files.map(f => {
-      if (f.isFolder) {
+      if (f.mimeType === FOLDER) {
         return `<div class="file-card" onclick="App.navigateTo('${f.id}', '${f.name.replace(/'/g, "\\'")}')">
           <div class="file-icon">${FOLDER_ICON}</div>
           <div class="file-details">
@@ -264,12 +254,11 @@ const App = (() => {
           </div>
         </div>`;
       }
-      if (f.isPrintable) {
+      if (isPrintable(f.mimeType)) {
         const checked = state.selectedIds.has(f.id) ? 'checked' : '';
         const icon = getFileIcon(f.mimeType);
         const typeLabel = getFileTypeLabel(f.mimeType);
         const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
-        console.log('Rendering file:', f.name, 'isPrintable:', f.isPrintable);
         return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
@@ -305,7 +294,7 @@ const App = (() => {
   }
 
   function toggleSelectAll() {
-    const printables = state.filteredFiles.filter(f => f.isPrintable);
+    const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
     const allSelected = printables.length > 0 && printables.every(f => state.selectedIds.has(f.id));
     if (allSelected) {
       printables.forEach(f => state.selectedIds.delete(f.id));
@@ -317,7 +306,7 @@ const App = (() => {
   }
 
   function updateSelectionUI() {
-    const printables = state.filteredFiles.filter(f => f.isPrintable);
+    const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
     const count = state.selectedIds.size;
     const total = printables.length;
     $('selection-count').textContent = count > 0 ? `${count} of ${total} selected` : `${total} documents`;
@@ -329,10 +318,10 @@ const App = (() => {
   function filterFiles(query) {
     const q = query.toLowerCase().trim();
     if (!q) {
-      state.filteredFiles = state.files.filter(f => f.isFolder || f.isPrintable);
+      state.filteredFiles = state.files.filter(f => f.mimeType === FOLDER || isPrintable(f.mimeType));
     } else {
       state.filteredFiles = state.files.filter(f =>
-        (f.isFolder || f.isPrintable) && f.name.toLowerCase().includes(q)
+        (f.mimeType === FOLDER || isPrintable(f.mimeType)) && f.name.toLowerCase().includes(q)
       );
     }
     renderFileList();
@@ -341,7 +330,7 @@ const App = (() => {
 
   async function startBatchPrint() {
     const files = state.filteredFiles
-      .filter(f => f.isPrintable && state.selectedIds.has(f.id));
+      .filter(f => isPrintable(f.mimeType) && state.selectedIds.has(f.id));
 
     if (files.length === 0) return;
 
