@@ -72,7 +72,9 @@ const App = (() => {
       client_id: GOOGLE_CLIENT_ID,
       scope: SCOPES,
       callback: (resp) => {
+        console.log('OAuth callback received:', resp);
         if (resp.error) {
+          console.error('OAuth error:', resp.error, resp);
           showToast('Sign-in failed: ' + resp.error, 'error');
           return;
         }
@@ -105,10 +107,13 @@ const App = (() => {
   }
 
   async function onSignedIn() {
+    console.log('onSignedIn called, token:', accessToken ? 'present' : 'missing');
     try {
       const resp = await fetchWithAuth('https://www.googleapis.com/oauth2/v3/userinfo');
       state.user = await resp.json();
-    } catch {
+      console.log('User info loaded:', state.user.name);
+    } catch (e) {
+      console.error('Failed to load user info:', e);
       state.user = { name: 'User', picture: '' };
     }
     renderUserInfo();
