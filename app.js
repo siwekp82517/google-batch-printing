@@ -186,23 +186,47 @@ const App = (() => {
       return resp.blob();
     }
 
-    if (mimeType === GOOGLE_SHEET) {
+    if (mimeType === GOOGLE_SHEET || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
+      try {
+        const resp = await fetchWithAuth(
+          `https://docs.google.com/spreadsheets/d/${fileId}/export?format=pdf&portrait=false&fitw=true&size=A4`
+        );
+        return resp.blob();
+      } catch {
+        throw new Error('Spreadsheet cannot be converted to PDF. Save as Google Sheet first.');
+      }
+    }
+
+    if (mimeType === GOOGLE_DOC || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
+      try {
+        const resp = await fetchWithAuth(
+          `https://docs.google.com/document/d/${fileId}/export?format=pdf`
+        );
+        return resp.blob();
+      } catch {
+        throw new Error('Document cannot be converted to PDF. Save as Google Doc first.');
+      }
+    }
+
+    if (mimeType === GOOGLE_SLIDE || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || mimeType === 'application/vnd.ms-powerpoint') {
+      try {
+        const resp = await fetchWithAuth(
+          `https://docs.google.com/presentation/d/${fileId}/export?format=pdf`
+        );
+        return resp.blob();
+      } catch {
+        throw new Error('Presentation cannot be converted to PDF. Save as Google Slides first.');
+      }
+    }
+
+    if (mimeType === GOOGLE_DRAWING) {
       const resp = await fetchWithAuth(
-        `https://docs.google.com/spreadsheets/d/${fileId}/export?format=pdf&portrait=false&fitw=true&size=A4`
+        `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
       );
       return resp.blob();
     }
 
-    const exportResp = await fetchWithAuth(
-      `${DRIVE_API}/files/${fileId}/export?mimeType=${encodeURIComponent('application/pdf')}`
-    );
-    const contentType = exportResp.headers.get('content-type') || '';
-    if (contentType.includes('application/pdf')) {
-      return exportResp.blob();
-    }
-
-    const resp = await fetchWithAuth(`${DRIVE_API}/files/${fileId}?alt=media`);
-    return resp.blob();
+    throw new Error('This file type cannot be converted to PDF.');
   }
 
   async function navigateTo(folderId, folderName) {
