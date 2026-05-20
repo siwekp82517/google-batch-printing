@@ -282,41 +282,55 @@ const App = (() => {
 
     state.printing = true;
     state.printCancelled = false;
-    state.printQueue = [...pdfs];
 
     $('progress-modal').classList.remove('hidden');
     $('print-btn').disabled = true;
 
-    await printNext();
+    try {
+      const blobs = [];
+
+      for (let i = 0; i < pdfs.length; i++) {
+        if (state.printCancelled) { finishPrint(); return; }
+        updateProgress(i, pdfs.length, `Downloading: ${pdfs[i].name}`);
+        const blob = await downloadFile(pdfs[i].id);
+        blobs.push({ blob, name: pdfs[i].name });
+      }
+
+      if (state.printCancelled) { finishPrint(); return; }
+
+      updateProgress(pdfs.length, pdfs.length, 'Merging PDFs...');
+      const mergedBlob = await mergePdfs(blobs);
+
+      if (state.printCancelled) { finishPrint(); return; }
+
+      updateProgress(pdfs.length, pdfs.length, 'Opening print dialog...');
+      await printPdf(mergedBlob, `${pdfs.length} documents merged`);
+
+      finishPrint();
+    } catch (err) {
+      console.error('Batch print error:', err);
+      showToast(`Print failed: ${err.message}`, 'error');
+      finishPrint();
+    }
   }
 
-  async function printNext() {
-    if (state.printCancelled || state.printQueue.length === 0) {
-      finishPrint();
-      return;
+  async function mergePdfs(pdfItems) {
+    const { PDFDocument } = PDFLib;
+    const mergedPdf = await PDFDocument.create();
+
+    for (const item of pdfItems) {
+      const arrayBuffer = await item.blob.arrayBuffer();
+      try {
+        const donorPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+        const pages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
+        pages.forEach(page => mergedPdf.addPage(page));
+      } catch (e) {
+        console.warn(`Skipping corrupt PDF: ${item.name}`, e);
+      }
     }
 
-    const file = state.printQueue.shift();
-    const current = state.printQueue.length > 0
-      ? state.selectedIds.size - state.printQueue.length
-      : state.selectedIds.size;
-    const total = state.selectedIds.size;
-
-    updateProgress(current, total, file.name);
-
-    try {
-      const blob = await downloadFile(file.id);
-      if (state.printCancelled) { finishPrint(); return; }
-      await printPdf(blob, file.name);
-    } catch (err) {
-      showToast(`Error downloading ${file.name}: ${err.message}`, 'error');
-    }
-
-    if (state.printQueue.length > 0 && !state.printCancelled) {
-      await printNext();
-    } else {
-      finishPrint();
-    }
+    const mergedBytes = await mergedPdf.save();
+    return new Blob([mergedBytes], { type: 'application/pdf' });
   }
 
   function printPdf(blob, filename) {
@@ -364,20 +378,19 @@ const App = (() => {
 
   function finishPrint() {
     state.printing = false;
-    state.printQueue = [];
     $('progress-modal').classList.add('hidden');
     $('print-btn').disabled = state.selectedIds.size === 0;
 
     if (!state.printCancelled) {
       const count = state.selectedIds.size;
-      showToast(`Successfully queued ${count} PDF${count !== 1 ? 's' : ''} for printing`, 'success');
+      showToast(`Sent ${count} PDF${count !== 1 ? 's' : ''} to printer as one job`, 'success');
     }
   }
 
-  function updateProgress(current, total, filename) {
-    $('progress-title').textContent = 'Printing PDFs...';
-    $('progress-file').textContent = filename;
-    $('progress-count').textContent = `${current} of ${total}`;
+  function updateProgress(current, total, label) {
+    $('progress-title').textContent = 'Preparing print job...';
+    $('progress-file').textContent = label;
+    $('progress-count').textContent = total > 0 ? `${current} of ${total}` : '';
     $('progress-bar').style.width = `${total > 0 ? (current / total) * 100 : 0}%`;
   }
 
