@@ -1,0 +1,21 @@
+{
+  "name": "Google Batch PDF Printer",
+  "short_name": "Batch Print",
+  "description": "Batch print PDFs from your Google Drive",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%231a73e8'/%3E%3Cg fill='white'%3E%3Cpath d='M56 120h80v12H56z'/%3E%3Cpath d='M64 56h64l16 52H48z'/%3E%3Cpath d='M88 108V72h16v36'/%3E%3C/g%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='64' fill='%231a73e8'/%3E%3Cg fill='white'%3E%3Cpath d='M148 320h216v32H148z'/%3E%3Cpath d='M168 148h176l44 140H124z'/%3E%3Cpath d='M232 288V188h48v100'/%3E%3C/g%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

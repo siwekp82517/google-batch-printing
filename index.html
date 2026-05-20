@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Batch PDF Printer</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <svg viewBox="0 0 48 48" width="64" height="64">
+          <path fill="#1a73e8" d="M24 4C12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20S35.05 4 24 4z"/>
+          <path fill="#fff" d="M18 32h12v4H18z"/>
+          <path fill="#fff" d="M20 14h8l6 14H14z"/>
+          <path fill="#fff" d="M22 28V18h4v10"/>
+        </svg>
+      </div>
+      <h1>Google Batch PDF Printer</h1>
+      <p class="auth-subtitle">Sign in with your Google account to browse and batch print PDFs from your Drive</p>
+      <button id="sign-in-btn" class="btn-sign-in" onclick="App.signIn()" disabled>
+        <svg viewBox="0 0 18 18" width="18" height="18">
+          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p id="auth-loading" class="auth-loading">Loading Google Sign-In...</p>
+    </div>
+  </div>
+
+  <div id="main-app" class="main-app hidden">
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="app-title">Batch PDF Printer</h1>
+      </div>
+      <div class="header-right">
+        <div class="user-info">
+          <img id="user-avatar" class="user-avatar" src="" alt="">
+          <span id="user-name" class="user-name"></span>
+        </div>
+        <button class="btn-sign-out" onclick="App.signOut()">Sign out</button>
+      </div>
+    </header>
+
+    <nav id="breadcrumbs" class="breadcrumbs"></nav>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <label class="select-all-label">
+          <input type="checkbox" id="select-all" onchange="App.toggleSelectAll()">
+          <span>Select all PDFs</span>
+        </label>
+        <span id="selection-count" class="selection-count"></span>
+      </div>
+      <div class="toolbar-center">
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="#5f6368" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <input type="text" id="search-input" placeholder="Filter PDFs..." oninput="App.filterFiles(this.value)">
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <button id="print-btn" class="btn-print" onclick="App.startBatchPrint()" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
+          </svg>
+          <span id="print-btn-text">Print Selected</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="file-list" class="file-list"></div>
+
+    <div id="empty-state" class="empty-state hidden">
+      <svg viewBox="0 0 24 24" width="48" height="48">
+        <path fill="#9aa0a6" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+      </svg>
+      <p>This folder is empty</p>
+    </div>
+
+    <div id="loading-state" class="loading-state hidden">
+      <div class="spinner"></div>
+      <p>Loading files...</p>
+    </div>
+  </div>
+
+  <div id="progress-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2 id="progress-title">Printing PDFs...</h2>
+      <div class="progress-info">
+        <span id="progress-file" class="progress-file"></span>
+        <span id="progress-count" class="progress-count"></span>
+      </div>
+      <div class="progress-bar-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <button class="btn-cancel" onclick="App.cancelPrint()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <iframe id="print-frame" class="print-frame"></iframe>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
