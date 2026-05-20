@@ -242,6 +242,8 @@ const App = (() => {
   function renderFileList() {
     const el = $('file-list');
     const files = state.filteredFiles;
+    console.log('renderFileList called with', files.length, 'files');
+    console.log('Folders:', files.filter(f => f.isFolder).length, 'Printable:', files.filter(f => f.isPrintable).length);
 
     if (files.length === 0) {
       el.classList.add('hidden');
@@ -267,6 +269,7 @@ const App = (() => {
         const icon = getFileIcon(f.mimeType);
         const typeLabel = getFileTypeLabel(f.mimeType);
         const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
+        console.log('Rendering file:', f.name, 'isPrintable:', f.isPrintable);
         return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
