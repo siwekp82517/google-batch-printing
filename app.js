@@ -259,7 +259,7 @@ const App = (() => {
         const icon = getFileIcon(f.mimeType);
         const typeLabel = getFileTypeLabel(f.mimeType);
         const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
-        return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}">
+        return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
             <div class="file-name" title="${f.name}">${f.name}</div>
