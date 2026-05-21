@@ -319,6 +319,161 @@ body {
   cursor: not-allowed;
 }
 
+.btn-download-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition), opacity var(--transition);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn-download-header:hover:not(:disabled) {
+  background: rgba(255,255,255,0.25);
+}
+
+.btn-download-header:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.drive-toggle-bar {
+  display: flex;
+  gap: 0;
+  padding: 8px 24px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.drive-toggle-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  font-family: inherit;
+}
+
+.drive-toggle-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.drive-toggle-btn.active {
+  background: var(--surface);
+  color: var(--primary);
+  border-color: var(--border);
+  position: relative;
+}
+
+.drive-toggle-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--surface);
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.filter-tab {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  font-family: inherit;
+}
+
+.filter-tab:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.filter-tab.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.list-header .lh-check {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.list-header .lh-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-header .lh-type {
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.list-header .lh-date {
+  width: 110px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.list-header .sortable {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-header .sortable:hover {
+  color: var(--primary);
+}
+
+.sort-arrow {
+  font-size: 10px;
+}
+
 .file-list {
   flex: 1;
   padding: 16px 24px;
@@ -689,6 +844,10 @@ body {
     padding: 6px 12px;
     font-size: 13px;
   }
+  .btn-download-header {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
   .breadcrumbs {
     padding: 12px 16px;
   }
@@ -697,5 +856,21 @@ body {
   }
   .file-list {
     padding: 16px;
+  }
+  .drive-toggle-bar {
+    padding: 8px 16px 0;
+  }
+  .filter-tabs {
+    padding: 8px 16px;
+    overflow-x: auto;
+  }
+  .list-header {
+    padding: 6px 16px;
+  }
+  .list-header .lh-type {
+    display: none;
+  }
+  .list-header .lh-date {
+    display: none;
   }
 }

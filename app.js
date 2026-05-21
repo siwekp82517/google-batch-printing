@@ -17,6 +17,12 @@ const App = (() => {
     printing: false,
     printQueue: [],
     printCancelled: false,
+    driveMode: 'my',
+    sharedDrives: [],
+    recursive: false,
+    activeFilter: 'all',
+    sortField: 'name',
+    sortAsc: true,
   };
 
   const FOLDER_ICON = `<svg viewBox="0 0 24 24"><path fill="#5f6368" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>`;
@@ -137,6 +143,11 @@ const App = (() => {
     state.files = [];
     state.filteredFiles = [];
     state.selectedIds.clear();
+    state.driveMode = 'my';
+    state.recursive = false;
+    state.activeFilter = 'all';
+    state.sortField = 'name';
+    state.sortAsc = true;
     $('auth-screen').classList.remove('hidden');
     $('main-app').classList.add('hidden');
   }
@@ -166,10 +177,21 @@ const App = (() => {
     $('file-list').classList.add('hidden');
     $('empty-state').classList.add('hidden');
     try {
+      if (state.driveMode === 'shared' && folderId === 'root') {
+        return await listSharedDrives();
+      }
+
       const query = `'${folderId}' in parents and trashed = false`;
       const fields = 'files(id,name,mimeType,size,modifiedTime)';
       const orderBy = 'folder,name';
-      const url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=1000`;
+      let url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=1000`;
+      if (state.driveMode === 'shared') {
+        url += '&supportsAllDrives=true&includeItemsFromAllDrives=true';
+        const driveId = state.breadcrumbs.length > 0 ? state.breadcrumbs[0].id : '';
+        if (driveId && driveId !== 'root') {
+          url += `&driveId=${driveId}&corpora=drive`;
+        }
+      }
       const resp = await fetchWithAuth(url);
       const data = await resp.json();
       return (data.files || []).map(f => ({
@@ -181,6 +203,25 @@ const App = (() => {
       }));
     } finally {
       $('loading-state').classList.add('hidden');
+    }
+  }
+
+  async function listSharedDrives() {
+    try {
+      const resp = await fetchWithAuth(`${DRIVE_API}/drives?pageSize=100`);
+      const data = await resp.json();
+      state.sharedDrives = data.drives || [];
+      return state.sharedDrives.map(d => ({
+        id: d.id,
+        name: d.name,
+        mimeType: FOLDER,
+        size: null,
+        modifiedTime: null,
+        isSharedDrive: true,
+      }));
+    } catch {
+      showToast('Could not load shared drives', 'error');
+      return [];
     }
   }
 
@@ -241,22 +282,73 @@ const App = (() => {
     $('search-input').value = '';
     $('select-all').checked = false;
 
-    if (folderId === 'root') {
+    if (state.driveMode === 'shared' && folderId === 'root') {
+      state.breadcrumbs = [{ id: 'root', name: 'Shared Drives' }];
+    } else if (folderId === 'root') {
       state.breadcrumbs = [{ id: 'root', name: 'My Drive' }];
     } else {
       const idx = state.breadcrumbs.findIndex(b => b.id === folderId);
       if (idx >= 0) {
         state.breadcrumbs = state.breadcrumbs.slice(0, idx + 1);
       } else {
-        state.breadcrumbs.push({ id: folderId, name: folderName });
+        const file = state.files.find(f => f.id === folderId);
+        if (state.driveMode === 'shared' && (file?.isSharedDrive || state.sharedDrives.some(d => d.id === folderId))) {
+          state.breadcrumbs = [{ id: folderId, name: folderName }];
+        } else {
+          state.breadcrumbs.push({ id: folderId, name: folderName });
+        }
       }
     }
 
     renderBreadcrumbs();
     state.files = await listFiles(folderId);
-    state.filteredFiles = state.files.filter(f => f.mimeType === FOLDER || isPrintable(f.mimeType));
+
+    if (state.recursive && folderId !== 'root' && !(state.driveMode === 'shared' && folderId === 'root')) {
+      state.files = await collectRecursiveFiles(state.files, folderId, 0);
+    }
+
+    applyFilters();
     renderFileList();
     updateSelectionUI();
+  }
+
+  async function collectRecursiveFiles(files, parentFolderId, depth) {
+    if (depth > 10) return files;
+    const folders = files.filter(f => f.mimeType === FOLDER);
+    const nonFolders = files.filter(f => f.mimeType !== FOLDER);
+    for (const folder of folders) {
+      try {
+        const subFiles = await listFilesSilent(folder.id);
+        const collected = await collectRecursiveFiles(subFiles, folder.id, depth + 1);
+        nonFolders.push(...collected);
+      } catch (e) {
+        console.warn(`Could not access subfolder ${folder.name}:`, e);
+      }
+    }
+    return nonFolders;
+  }
+
+  async function listFilesSilent(folderId) {
+    const query = `'${folderId}' in parents and trashed = false`;
+    const fields = 'files(id,name,mimeType,size,modifiedTime)';
+    const orderBy = 'folder,name';
+    let url = `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=1000`;
+    if (state.driveMode === 'shared') {
+      url += '&supportsAllDrives=true&includeItemsFromAllDrives=true';
+      const driveId = state.breadcrumbs.length > 0 ? state.breadcrumbs[0].id : '';
+      if (driveId && driveId !== 'root') {
+        url += `&driveId=${driveId}&corpora=drive`;
+      }
+    }
+    const resp = await fetchWithAuth(url);
+    const data = await resp.json();
+    return (data.files || []).map(f => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: f.size,
+      modifiedTime: f.modifiedTime,
+    }));
   }
 
   function renderBreadcrumbs() {
@@ -396,30 +488,128 @@ const App = (() => {
     $('selection-count').textContent = count > 0 ? `${count} of ${total} selected` : `${total} documents`;
     $('print-btn').disabled = count === 0;
     $('print-btn-text').textContent = `Print Selected (${count})`;
+    $('download-btn').disabled = count === 0;
+    $('download-btn-text').textContent = count > 0 ? `Download (${count})` : 'Download';
     $('select-all').checked = total > 0 && count === total;
   }
 
-  function filterFiles(query) {
-    const q = query.toLowerCase().trim();
-    if (!q) {
-      state.filteredFiles = state.files.filter(f => f.mimeType === FOLDER || isPrintable(f.mimeType));
-    } else {
-      state.filteredFiles = state.files.filter(f =>
-        (f.mimeType === FOLDER || isPrintable(f.mimeType)) && f.name.toLowerCase().includes(q)
-      );
+  function applyFilters() {
+    const q = ($('search-input').value || '').toLowerCase().trim();
+    let result = state.files.filter(f => f.mimeType === FOLDER || isPrintable(f.mimeType));
+
+    if (q) {
+      result = result.filter(f => f.mimeType === FOLDER || f.name.toLowerCase().includes(q));
     }
+
+    if (state.activeFilter !== 'all') {
+      result = result.filter(f => {
+        if (f.mimeType === FOLDER) return true;
+        return getFilterCategory(f.mimeType) === state.activeFilter;
+      });
+    }
+
+    state.filteredFiles = sortFiles(result);
+  }
+
+  function getFilterCategory(mimeType) {
+    if (mimeType === PDF) return 'pdf';
+    if (mimeType === GOOGLE_DOC || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') return 'doc';
+    if (mimeType === GOOGLE_SHEET || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') return 'sheet';
+    if (mimeType === GOOGLE_SLIDE || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || mimeType === 'application/vnd.ms-powerpoint') return 'slide';
+    return 'other';
+  }
+
+  function sortFiles(files) {
+    const folders = files.filter(f => f.mimeType === FOLDER);
+    const docs = files.filter(f => f.mimeType !== FOLDER);
+    const sorted = [...folders, ...docs.sort((a, b) => {
+      let cmp = 0;
+      if (state.sortField === 'name') {
+        cmp = a.name.localeCompare(b.name);
+      } else if (state.sortField === 'type') {
+        cmp = getFileTypeLabel(a.mimeType).localeCompare(getFileTypeLabel(b.mimeType));
+        if (cmp === 0) cmp = a.name.localeCompare(b.name);
+      } else if (state.sortField === 'date') {
+        const da = a.modifiedTime ? new Date(a.modifiedTime).getTime() : 0;
+        const db = b.modifiedTime ? new Date(b.modifiedTime).getTime() : 0;
+        cmp = da - db;
+        if (cmp === 0) cmp = a.name.localeCompare(b.name);
+      }
+      return state.sortAsc ? cmp : -cmp;
+    })];
+    return sorted;
+  }
+
+  function filterFiles(query) {
+    applyFilters();
     renderFileList();
     updateSelectionUI();
+  }
+
+  function setFilter(filter) {
+    state.activeFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    applyFilters();
+    renderFileList();
+    updateSelectionUI();
+  }
+
+  function sortBy(field) {
+    if (state.sortField === field) {
+      state.sortAsc = !state.sortAsc;
+    } else {
+      state.sortField = field;
+      state.sortAsc = true;
+    }
+    updateSortArrows();
+    applyFilters();
+    renderFileList();
+  }
+
+  function updateSortArrows() {
+    ['name', 'type', 'date'].forEach(f => {
+      const el = $('sort-' + f);
+      if (el) {
+        if (f === state.sortField) {
+          el.textContent = state.sortAsc ? '\u25B2' : '\u25BC';
+        } else {
+          el.textContent = '';
+        }
+      }
+    });
+  }
+
+  function switchDrive(mode) {
+    state.driveMode = mode;
+    $('drive-my-btn').classList.toggle('active', mode === 'my');
+    $('drive-shared-btn').classList.toggle('active', mode === 'shared');
+    navigateTo('root', mode === 'my' ? 'My Drive' : 'Shared Drives');
+  }
+
+  function toggleRecursive() {
+    state.recursive = $('recursive-check').checked;
+    navigateTo(state.currentFolder, state.breadcrumbs[state.breadcrumbs.length - 1]?.name || 'My Drive');
   }
 
   function setViewMode(mode) {
     state.viewMode = mode;
     $('view-grid-btn').classList.toggle('active', mode === 'grid');
     $('view-list-btn').classList.toggle('active', mode === 'list');
+    $('list-header').classList.toggle('hidden', mode !== 'list');
     renderFileList();
   }
 
   async function startBatchPrint() {
+    await _processBatch('print');
+  }
+
+  async function startBatchDownload() {
+    await _processBatch('download');
+  }
+
+  async function _processBatch(mode) {
     const files = state.filteredFiles
       .filter(f => isPrintable(f.mimeType) && state.selectedIds.has(f.id));
 
@@ -430,6 +620,7 @@ const App = (() => {
 
     $('progress-modal').classList.remove('hidden');
     $('print-btn').disabled = true;
+    $('download-btn').disabled = true;
 
     try {
       const blobs = [];
@@ -456,13 +647,27 @@ const App = (() => {
 
       if (state.printCancelled) { finishPrint(); return; }
 
-      updateProgress(files.length, files.length, 'Opening print dialog...');
-      await printPdf(mergedBlob, `${files.length} documents merged`);
+      if (mode === 'download') {
+        updateProgress(files.length, files.length, 'Downloading...');
+        const url = URL.createObjectURL(mergedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `merged-${files.length}-documents.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast(`Downloaded ${files.length} document${files.length !== 1 ? 's' : ''} as merged PDF`, 'success');
+      } else {
+        updateProgress(files.length, files.length, 'Opening print dialog...');
+        await printPdf(mergedBlob, `${files.length} documents merged`);
+        showToast(`Sent ${files.length} PDF${files.length !== 1 ? 's' : ''} to printer as one job`, 'success');
+      }
 
       finishPrint();
     } catch (err) {
-      console.error('Batch print error:', err);
-      showToast(`Print failed: ${err.message}`, 'error');
+      console.error('Batch error:', err);
+      showToast(`Operation failed: ${err.message}`, 'error');
       finishPrint();
     }
   }
@@ -532,11 +737,7 @@ const App = (() => {
     state.printing = false;
     $('progress-modal').classList.add('hidden');
     $('print-btn').disabled = state.selectedIds.size === 0;
-
-    if (!state.printCancelled) {
-      const count = state.selectedIds.size;
-      showToast(`Sent ${count} PDF${count !== 1 ? 's' : ''} to printer as one job`, 'success');
-    }
+    $('download-btn').disabled = state.selectedIds.size === 0;
   }
 
   function updateProgress(current, total, label) {
@@ -571,6 +772,11 @@ const App = (() => {
     filterFiles,
     setViewMode,
     startBatchPrint,
+    startBatchDownload,
     cancelPrint,
+    switchDrive,
+    toggleRecursive,
+    setFilter,
+    sortBy,
   };
 })();
