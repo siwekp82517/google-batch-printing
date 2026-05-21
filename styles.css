@@ -327,6 +327,12 @@ body {
   align-content: start;
 }
 
+.file-list.list-view {
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 8px 24px;
+}
+
 .file-card {
   display: flex;
   align-items: center;
@@ -348,6 +354,115 @@ body {
 .file-card.selected {
   background: var(--primary-light);
   border-color: var(--primary);
+}
+
+.file-card.last-selected {
+  border-color: var(--warning) !important;
+  box-shadow: 0 0 0 2px #f9ab00, var(--shadow-1) !important;
+}
+
+.file-card.last-selected.selected {
+  background: #fef7e0;
+  border-color: var(--warning) !important;
+  box-shadow: 0 0 0 2px #f9ab00, var(--shadow-1) !important;
+}
+
+.file-list.list-view .file-card {
+  padding: 8px 16px;
+  border-radius: 4px;
+  gap: 10px;
+}
+
+.file-list.list-view .file-card .file-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.file-list.list-view .file-card .file-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.file-list.list-view .file-card .file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-list.list-view .file-card .file-name {
+  font-size: 13px;
+}
+
+.file-list.list-view .file-card .file-meta-inline {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.file-list.list-view .file-card .file-meta-date {
+  min-width: 100px;
+  text-align: right;
+}
+
+.file-list.list-view .file-printable {
+  display: flex;
+  align-items: center;
+}
+
+.file-list.list-view .file-folder {
+  display: flex;
+  align-items: center;
+}
+
+.file-meta-inline {
+  display: none;
+}
+
+.file-list.list-view .file-meta-inline {
+  display: inline;
+}
+
+.file-list.list-view .file-meta {
+  display: none;
+}
+
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-variant);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--on-surface-variant);
+  transition: background var(--transition), color var(--transition);
+}
+
+.view-toggle-btn:hover {
+  background: var(--border);
+}
+
+.view-toggle-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .file-card .file-icon {
@@ -556,8 +671,11 @@ body {
     max-width: none;
     flex-basis: 100%;
   }
-  .file-list {
+  .file-list:not(.list-view) {
     grid-template-columns: 1fr;
+  }
+  .file-list.list-view .file-meta-date {
+    display: none;
   }
   .app-header {
     padding: 12px 16px;

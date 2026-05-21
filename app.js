@@ -12,6 +12,8 @@ const App = (() => {
     files: [],
     filteredFiles: [],
     selectedIds: new Set(),
+    lastSelectedId: null,
+    viewMode: 'grid',
     printing: false,
     printQueue: [],
     printCancelled: false,
@@ -69,6 +71,8 @@ const App = (() => {
   }
 
   function $(id) { return document.getElementById(id); }
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
   function formatSize(bytes) {
     if (!bytes) return '';
@@ -232,6 +236,7 @@ const App = (() => {
   async function navigateTo(folderId, folderName) {
     state.currentFolder = folderId;
     state.selectedIds.clear();
+    state.lastSelectedId = null;
     state.filteredFiles = [];
     $('search-input').value = '';
     $('select-all').checked = false;
@@ -272,6 +277,7 @@ const App = (() => {
   function renderFileList() {
     const el = $('file-list');
     const files = state.filteredFiles;
+    const isListView = state.viewMode === 'list';
 
     if (files.length === 0) {
       el.classList.add('hidden');
@@ -281,14 +287,17 @@ const App = (() => {
 
     $('empty-state').classList.add('hidden');
     el.classList.remove('hidden');
+    el.classList.toggle('list-view', isListView);
 
     el.innerHTML = files.map(f => {
+      const safeName = esc(f.name);
       if (f.mimeType === FOLDER) {
-        return `<div class="file-card" onclick="App.navigateTo('${f.id}', '${f.name.replace(/'/g, "\\'")}')">
+        const folderMeta = isListView ? `<span class="file-meta-inline">Folder</span>` : `<div class="file-meta">Folder</div>`;
+        return `<div class="file-card file-folder" onclick="App.navigateTo('${f.id}', '${f.name.replace(/'/g, "\\'")}')">
           <div class="file-icon">${FOLDER_ICON}</div>
           <div class="file-details">
-            <div class="file-name" title="${f.name}">${f.name}</div>
-            <div class="file-meta">Folder</div>
+            <div class="file-name" title="${safeName}">${safeName}</div>
+            ${folderMeta}
           </div>
         </div>`;
       }
@@ -297,10 +306,26 @@ const App = (() => {
         const icon = getFileIcon(f.mimeType);
         const typeLabel = getFileTypeLabel(f.mimeType);
         const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
-        return `<div class="file-card ${state.selectedIds.has(f.id) ? 'selected' : ''}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
+        const isLast = state.lastSelectedId === f.id;
+        const selectedCls = state.selectedIds.has(f.id) ? ' selected' : '';
+        const lastCls = isLast ? ' last-selected' : '';
+        if (isListView) {
+          return `<div class="file-card file-printable${selectedCls}${lastCls}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
+            <div class="file-checkbox" onclick="event.stopPropagation()">
+              <input type="checkbox" ${checked} onchange="App.toggleFile('${f.id}')">
+            </div>
+            <div class="file-icon">${icon}</div>
+            <div class="file-details">
+              <div class="file-name" title="${safeName}">${safeName}</div>
+            </div>
+            <div class="file-meta-inline">${typeLabel}${sizeStr}</div>
+            <div class="file-meta-inline file-meta-date">${formatDate(f.modifiedTime)}</div>
+          </div>`;
+        }
+        return `<div class="file-card file-printable${selectedCls}${lastCls}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
-            <div class="file-name" title="${f.name}">${f.name}</div>
+            <div class="file-name" title="${safeName}">${safeName}</div>
             <div class="file-meta">${typeLabel}${sizeStr} &middot; ${formatDate(f.modifiedTime)}</div>
           </div>
           <div class="file-checkbox" onclick="event.stopPropagation()">
@@ -313,12 +338,20 @@ const App = (() => {
   }
 
   function toggleFile(fileId) {
+    const previousLastId = state.lastSelectedId;
     if (state.selectedIds.has(fileId)) {
       state.selectedIds.delete(fileId);
+      if (state.lastSelectedId === fileId) {
+        state.lastSelectedId = null;
+      }
     } else {
       state.selectedIds.add(fileId);
+      state.lastSelectedId = fileId;
     }
     updateCardSelection(fileId);
+    if (previousLastId && previousLastId !== fileId) {
+      updateCardSelection(previousLastId);
+    }
     updateSelectionUI();
   }
 
@@ -327,6 +360,7 @@ const App = (() => {
     if (!card) return;
     const isSelected = state.selectedIds.has(fileId);
     card.classList.toggle('selected', isSelected);
+    card.classList.toggle('last-selected', state.lastSelectedId === fileId);
     const cb = card.querySelector('input[type="checkbox"]');
     if (cb) cb.checked = isSelected;
   }
@@ -336,8 +370,12 @@ const App = (() => {
     const allSelected = printables.length > 0 && printables.every(f => state.selectedIds.has(f.id));
     if (allSelected) {
       printables.forEach(f => state.selectedIds.delete(f.id));
+      state.lastSelectedId = null;
     } else {
       printables.forEach(f => state.selectedIds.add(f.id));
+      if (printables.length > 0) {
+        state.lastSelectedId = printables[printables.length - 1].id;
+      }
     }
     renderFileList();
     updateSelectionUI();
@@ -364,6 +402,13 @@ const App = (() => {
     }
     renderFileList();
     updateSelectionUI();
+  }
+
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    $('view-grid-btn').classList.toggle('active', mode === 'grid');
+    $('view-list-btn').classList.toggle('active', mode === 'list');
+    renderFileList();
   }
 
   async function startBatchPrint() {
@@ -516,6 +561,7 @@ const App = (() => {
     toggleFile,
     toggleSelectAll,
     filterFiles,
+    setViewMode,
     startBatchPrint,
     cancelPrint,
   };
