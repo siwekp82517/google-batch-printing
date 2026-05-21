@@ -292,29 +292,30 @@ body {
   box-shadow: 0 0 0 2px var(--primary-light);
 }
 
-.btn-print {
+.btn-print-header {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 20px;
+  padding: 7px 20px;
   font-size: 14px;
   font-weight: 500;
-  color: white;
-  background: var(--primary);
+  color: var(--primary);
+  background: white;
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
-  transition: background var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), box-shadow var(--transition), opacity var(--transition);
   font-family: inherit;
+  white-space: nowrap;
 }
 
-.btn-print:hover:not(:disabled) {
-  background: var(--primary-dark);
+.btn-print-header:hover:not(:disabled) {
   box-shadow: var(--shadow-1);
+  background: #f0f4ff;
 }
 
-.btn-print:disabled {
-  background: var(--border);
+.btn-print-header:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -429,10 +430,8 @@ body {
 .view-toggle {
   display: flex;
   align-items: center;
-  gap: 2px;
-  background: var(--surface-variant);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -440,17 +439,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: transparent;
+  width: 36px;
+  height: 34px;
+  background: var(--surface);
   border: none;
   cursor: pointer;
   color: var(--on-surface-variant);
   transition: background var(--transition), color var(--transition);
 }
 
+.view-toggle-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
 .view-toggle-btn:hover {
-  background: var(--border);
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .view-toggle-btn.active {
@@ -459,9 +463,6 @@ body {
 }
 
 .toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -679,9 +680,14 @@ body {
   }
   .app-header {
     padding: 12px 16px;
+    gap: 8px;
   }
   .user-name {
     display: none;
+  }
+  .btn-print-header {
+    padding: 6px 12px;
+    font-size: 13px;
   }
   .breadcrumbs {
     padding: 12px 16px;
