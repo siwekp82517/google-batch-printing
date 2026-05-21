@@ -844,7 +844,35 @@ body {
     padding: 6px 12px;
     font-size: 13px;
   }
-  .btn-download-header {
+.paper-size-select {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.paper-size-select:hover {
+  background-color: rgba(255,255,255,0.25);
+}
+
+.paper-size-select option {
+  color: var(--on-surface);
+  background: var(--surface);
+}
+
+.btn-download-header {
     padding: 6px 12px;
     font-size: 13px;
   }

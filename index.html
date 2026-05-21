@@ -41,6 +41,13 @@
       <div class="header-left">
         <h1 class="app-title">Batch PDF Printer</h1>
       </div>
+      <select id="paper-size" class="paper-size-select" onchange="App.setPaperSize(this.value)">
+        <option value="A4">A4</option>
+        <option value="A3">A3</option>
+        <option value="letter">Letter</option>
+        <option value="legal">Legal</option>
+        <option value="tabloid">Tabloid</option>
+      </select>
       <button id="download-btn" class="btn-download-header" onclick="App.startBatchDownload()" disabled>
         <svg viewBox="0 0 24 24" width="18" height="18">
           <path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>

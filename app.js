@@ -23,6 +23,7 @@ const App = (() => {
     activeFilter: 'all',
     sortField: 'name',
     sortAsc: true,
+    paperSize: 'A4',
   };
 
   const FOLDER_ICON = `<svg viewBox="0 0 24 24"><path fill="#5f6368" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>`;
@@ -234,7 +235,7 @@ const App = (() => {
     if (mimeType === GOOGLE_SHEET || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel') {
       try {
         const resp = await fetchWithAuth(
-          `https://docs.google.com/spreadsheets/d/${fileId}/export?format=pdf&portrait=false&fitw=true&size=A4`
+          `https://docs.google.com/spreadsheets/d/${fileId}/export?format=pdf&portrait=false&fitw=true&size=${state.paperSize}`
         );
         return resp.blob();
       } catch {
@@ -245,7 +246,7 @@ const App = (() => {
     if (mimeType === GOOGLE_DOC || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
       try {
         const resp = await fetchWithAuth(
-          `https://docs.google.com/document/d/${fileId}/export?format=pdf`
+          `https://docs.google.com/document/d/${fileId}/export?format=pdf&size=${state.paperSize}`
         );
         return resp.blob();
       } catch {
@@ -256,7 +257,7 @@ const App = (() => {
     if (mimeType === GOOGLE_SLIDE || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || mimeType === 'application/vnd.ms-powerpoint') {
       try {
         const resp = await fetchWithAuth(
-          `https://docs.google.com/presentation/d/${fileId}/export?format=pdf`
+          `https://docs.google.com/presentation/d/${fileId}/export?format=pdf&size=${state.paperSize}`
         );
         return resp.blob();
       } catch {
@@ -593,6 +594,10 @@ const App = (() => {
     navigateTo(state.currentFolder, state.breadcrumbs[state.breadcrumbs.length - 1]?.name || 'My Drive');
   }
 
+  function setPaperSize(size) {
+    state.paperSize = size;
+  }
+
   function setViewMode(mode) {
     state.viewMode = mode;
     $('view-grid-btn').classList.toggle('active', mode === 'grid');
@@ -778,5 +783,6 @@ const App = (() => {
     toggleRecursive,
     setFilter,
     sortBy,
+    setPaperSize,
   };
 })();
