@@ -337,20 +337,31 @@ const App = (() => {
     }).join('');
   }
 
+  function recalcLastSelected() {
+    const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
+    for (let i = printables.length - 1; i >= 0; i--) {
+      if (state.selectedIds.has(printables[i].id)) {
+        state.lastSelectedId = printables[i].id;
+        return;
+      }
+    }
+    state.lastSelectedId = null;
+  }
+
   function toggleFile(fileId) {
     const previousLastId = state.lastSelectedId;
     if (state.selectedIds.has(fileId)) {
       state.selectedIds.delete(fileId);
-      if (state.lastSelectedId === fileId) {
-        state.lastSelectedId = null;
-      }
     } else {
       state.selectedIds.add(fileId);
-      state.lastSelectedId = fileId;
     }
+    recalcLastSelected();
     updateCardSelection(fileId);
-    if (previousLastId && previousLastId !== fileId) {
+    if (previousLastId && previousLastId !== state.lastSelectedId) {
       updateCardSelection(previousLastId);
+    }
+    if (state.lastSelectedId && state.lastSelectedId !== fileId) {
+      updateCardSelection(state.lastSelectedId);
     }
     updateSelectionUI();
   }
@@ -370,13 +381,10 @@ const App = (() => {
     const allSelected = printables.length > 0 && printables.every(f => state.selectedIds.has(f.id));
     if (allSelected) {
       printables.forEach(f => state.selectedIds.delete(f.id));
-      state.lastSelectedId = null;
     } else {
       printables.forEach(f => state.selectedIds.add(f.id));
-      if (printables.length > 0) {
-        state.lastSelectedId = printables[printables.length - 1].id;
-      }
     }
+    recalcLastSelected();
     renderFileList();
     updateSelectionUI();
   }
