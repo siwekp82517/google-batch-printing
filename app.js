@@ -24,6 +24,10 @@ const App = (() => {
     sortField: 'name',
     sortAsc: true,
     paperSize: 'A4',
+    localFiles: [],
+    keyboardFocusIndex: -1,
+    contextMenuFile: null,
+    theme: 'light',
   };
 
   const FOLDER_ICON = `<svg viewBox="0 0 24 24"><path fill="#5f6368" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>`;
@@ -98,6 +102,15 @@ const App = (() => {
     return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
   }
 
+  function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    let b = bytes;
+    while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+    return b.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+  }
+
   function formatDate(iso) {
     if (!iso) return '';
     return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -114,6 +127,18 @@ const App = (() => {
     return response;
   }
 
+  function initTheme() {
+    const saved = localStorage.getItem('batch-print-theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    state.theme = saved || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', state.theme);
+  }
+
+  function toggleTheme() {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('batch-print-theme', state.theme);
+    document.documentElement.setAttribute('data-theme', state.theme);
+  }
 
   function initAuth() {
     if (typeof google === 'undefined' || !google.accounts) {
@@ -152,11 +177,13 @@ const App = (() => {
     state.files = [];
     state.filteredFiles = [];
     state.selectedIds.clear();
+    state.localFiles = [];
     state.driveMode = 'my';
     state.recursive = false;
     state.activeFilter = 'all';
     state.sortField = 'name';
     state.sortAsc = true;
+    state.keyboardFocusIndex = -1;
     $('auth-screen').classList.remove('hidden');
     $('main-app').classList.add('hidden');
   }
@@ -235,6 +262,9 @@ const App = (() => {
   }
 
   async function downloadFile(fileId, mimeType) {
+    const localFile = state.localFiles.find(f => f.id === fileId);
+    if (localFile) return localFile.localFile;
+
     if (mimeType === PDF) {
       const resp = await fetchWithAuth(`${DRIVE_API}/files/${fileId}?alt=media`);
       return resp.blob();
@@ -288,6 +318,7 @@ const App = (() => {
     state.selectedIds.clear();
     state.lastSelectedId = null;
     state.filteredFiles = [];
+    state.keyboardFocusIndex = -1;
     $('search-input').value = '';
     $('select-all').checked = false;
 
@@ -366,7 +397,7 @@ const App = (() => {
       const isLast = i === state.breadcrumbs.length - 1;
       const cls = isLast ? 'breadcrumb-item active' : 'breadcrumb-item';
       const sep = isLast ? '' : '<span class="breadcrumb-sep">/</span>';
-      return `<span class="${cls}" onclick="App.navigateBreadcrumb(${i})">${b.name}</span>${sep}`;
+      return `<span class="${cls}" onclick="App.navigateBreadcrumb(${i})">${esc(b.name)}</span>${sep}`;
     }).join('');
   }
 
@@ -380,7 +411,7 @@ const App = (() => {
     const files = state.filteredFiles;
     const isListView = state.viewMode === 'list';
 
-    if (files.length === 0) {
+    if (files.length === 0 && state.localFiles.length === 0) {
       el.classList.add('hidden');
       $('empty-state').classList.remove('hidden');
       return;
@@ -390,11 +421,44 @@ const App = (() => {
     el.classList.remove('hidden');
     el.classList.toggle('list-view', isListView);
 
-    el.innerHTML = files.map(f => {
+    let html = '';
+
+    if (state.localFiles.length > 0) {
+      html += `<div class="local-files-section">
+        <div class="local-files-header">
+          <span>Local Files (${state.localFiles.length})</span>
+          <button class="btn-clear-local" onclick="App.clearLocalFiles()">Remove all</button>
+        </div>
+      </div>`;
+
+      for (const f of state.localFiles) {
+        const safeName = esc(f.name);
+        const checked = state.selectedIds.has(f.id) ? 'checked' : '';
+        const icon = getFileIcon(f.mimeType);
+        const typeLabel = getFileTypeLabel(f.mimeType);
+        const sizeStr = f.size ? ` &middot; ${formatSize(f.size)}` : '';
+        const selectedCls = state.selectedIds.has(f.id) ? ' selected' : '';
+
+        html += `<div class="file-card file-printable${selectedCls}" data-id="${f.id}" onclick="App.toggleFile('${f.id}', event)" oncontextmenu="App.showContextMenu(event, '${f.id}')">
+          <div class="file-icon">${icon}</div>
+          <div class="file-details">
+            <div class="file-name" title="${safeName}">${safeName}<span class="file-badge-local">Local</span></div>
+            ${isListView ? `<span class="file-meta-inline">${typeLabel}${sizeStr}</span>` : `<div class="file-meta">${typeLabel}${sizeStr}</div>`}
+          </div>
+          <div class="file-checkbox" onclick="event.stopPropagation()">
+            <input type="checkbox" ${checked} onchange="App.toggleFile('${f.id}')">
+          </div>
+        </div>`;
+      }
+    }
+
+    html += files.map((f, idx) => {
       const safeName = esc(f.name);
+      const focusCls = state.keyboardFocusIndex === idx ? ' keyboard-focus' : '';
+
       if (f.mimeType === FOLDER) {
         const folderMeta = isListView ? `<span class="file-meta-inline">Folder</span>` : `<div class="file-meta">Folder</div>`;
-        return `<div class="file-card file-folder" onclick="App.navigateTo('${f.id}', '${f.name.replace(/'/g, "\\'")}')">
+        return `<div class="file-card file-folder${focusCls}" data-id="${f.id}" data-index="${idx}" onclick="App.navigateTo('${f.id}', '${f.name.replace(/'/g, "\\'")}')">
           <div class="file-icon">${FOLDER_ICON}</div>
           <div class="file-details">
             <div class="file-name" title="${safeName}">${safeName}</div>
@@ -411,7 +475,7 @@ const App = (() => {
         const selectedCls = state.selectedIds.has(f.id) ? ' selected' : '';
         const lastCls = isLast ? ' last-selected' : '';
         if (isListView) {
-          return `<div class="file-card file-printable${selectedCls}${lastCls}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
+          return `<div class="file-card file-printable${selectedCls}${lastCls}${focusCls}" data-id="${f.id}" data-index="${idx}" onclick="App.toggleFile('${f.id}', event)" oncontextmenu="App.showContextMenu(event, '${f.id}')">
             <div class="file-checkbox" onclick="event.stopPropagation()">
               <input type="checkbox" ${checked} onchange="App.toggleFile('${f.id}')">
             </div>
@@ -423,7 +487,7 @@ const App = (() => {
             <div class="file-meta-inline file-meta-date">${formatDate(f.modifiedTime)}</div>
           </div>`;
         }
-        return `<div class="file-card file-printable${selectedCls}${lastCls}" data-id="${f.id}" onclick="App.toggleFile('${f.id}')">
+        return `<div class="file-card file-printable${selectedCls}${lastCls}${focusCls}" data-id="${f.id}" data-index="${idx}" onclick="App.toggleFile('${f.id}', event)" oncontextmenu="App.showContextMenu(event, '${f.id}')">
           <div class="file-icon">${icon}</div>
           <div class="file-details">
             <div class="file-name" title="${safeName}">${safeName}</div>
@@ -436,20 +500,43 @@ const App = (() => {
       }
       return '';
     }).join('');
+
+    el.innerHTML = html;
   }
 
   function recalcLastSelected() {
     const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
-    for (let i = printables.length - 1; i >= 0; i--) {
-      if (state.selectedIds.has(printables[i].id)) {
-        state.lastSelectedId = printables[i].id;
+    const localPrintables = state.localFiles.filter(f => isPrintable(f.mimeType));
+    const allPrintables = [...localPrintables, ...printables];
+    for (let i = allPrintables.length - 1; i >= 0; i--) {
+      if (state.selectedIds.has(allPrintables[i].id)) {
+        state.lastSelectedId = allPrintables[i].id;
         return;
       }
     }
     state.lastSelectedId = null;
   }
 
-  function toggleFile(fileId) {
+  function toggleFile(fileId, event) {
+    if (event && event.shiftKey && state.lastSelectedId) {
+      const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
+      const localPrintables = state.localFiles.filter(f => isPrintable(f.mimeType));
+      const allPrintables = [...localPrintables, ...printables];
+      const lastIdx = allPrintables.findIndex(f => f.id === state.lastSelectedId);
+      const curIdx = allPrintables.findIndex(f => f.id === fileId);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const start = Math.min(lastIdx, curIdx);
+        const end = Math.max(lastIdx, curIdx);
+        for (let i = start; i <= end; i++) {
+          state.selectedIds.add(allPrintables[i].id);
+        }
+        state.lastSelectedId = fileId;
+        renderFileList();
+        updateSelectionUI();
+        return;
+      }
+    }
+
     const previousLastId = state.lastSelectedId;
     if (state.selectedIds.has(fileId)) {
       state.selectedIds.delete(fileId);
@@ -479,27 +566,62 @@ const App = (() => {
 
   function toggleSelectAll() {
     const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
-    const allSelected = printables.length > 0 && printables.every(f => state.selectedIds.has(f.id));
+    const localPrintables = state.localFiles.filter(f => isPrintable(f.mimeType));
+    const allPrintables = [...localPrintables, ...printables];
+    const allSelected = allPrintables.length > 0 && allPrintables.every(f => state.selectedIds.has(f.id));
     if (allSelected) {
-      printables.forEach(f => state.selectedIds.delete(f.id));
+      allPrintables.forEach(f => state.selectedIds.delete(f.id));
     } else {
-      printables.forEach(f => state.selectedIds.add(f.id));
+      allPrintables.forEach(f => state.selectedIds.add(f.id));
     }
     recalcLastSelected();
     renderFileList();
     updateSelectionUI();
   }
 
+  function getSelectionEstimate() {
+    const selected = [...state.localFiles, ...state.files].filter(f => state.selectedIds.has(f.id));
+    let totalSize = 0;
+    let estimatedPages = 0;
+
+    for (const f of selected) {
+      if (f.size) {
+        const bytes = parseInt(f.size, 10);
+        totalSize += bytes;
+        if (f.mimeType === PDF) {
+          estimatedPages += Math.max(1, Math.round(bytes / 150000));
+        } else {
+          estimatedPages += Math.max(1, Math.round(bytes / 100000));
+        }
+      } else {
+        estimatedPages += 1;
+      }
+    }
+
+    return { totalSize, estimatedPages, count: selected.length };
+  }
+
   function updateSelectionUI() {
     const printables = state.filteredFiles.filter(f => isPrintable(f.mimeType));
+    const localPrintables = state.localFiles.filter(f => isPrintable(f.mimeType));
+    const totalPrintables = printables.length + localPrintables.length;
     const count = state.selectedIds.size;
-    const total = printables.length;
-    $('selection-count').textContent = count > 0 ? `${count} of ${total} selected` : `${total} documents`;
+    $('selection-count').textContent = count > 0 ? `${count} of ${totalPrintables} selected` : `${totalPrintables} documents`;
     $('print-btn').disabled = count === 0;
     $('print-btn-text').textContent = `Print Selected (${count})`;
     $('download-btn').disabled = count === 0;
     $('download-btn-text').textContent = count > 0 ? `Download (${count})` : 'Download';
-    $('select-all').checked = total > 0 && count === total;
+    $('select-all').checked = totalPrintables > 0 && count === totalPrintables;
+
+    const estEl = $('selection-estimate');
+    if (count > 0) {
+      const est = getSelectionEstimate();
+      let text = `Est. ~${est.estimatedPages} page${est.estimatedPages !== 1 ? 's' : ''}`;
+      if (est.totalSize > 0) text += `, ${formatBytes(est.totalSize)}`;
+      estEl.textContent = text;
+    } else {
+      estEl.textContent = '';
+    }
   }
 
   function applyFilters() {
@@ -623,8 +745,11 @@ const App = (() => {
   }
 
   async function _processBatch(mode) {
-    const files = state.filteredFiles
+    const driveFiles = state.filteredFiles
       .filter(f => isPrintable(f.mimeType) && state.selectedIds.has(f.id));
+    const localFiles = state.localFiles
+      .filter(f => state.selectedIds.has(f.id));
+    const files = [...localFiles, ...driveFiles];
 
     if (files.length === 0) return;
 
@@ -643,7 +768,11 @@ const App = (() => {
         updateProgress(i, files.length, `Converting: ${files[i].name}`);
         try {
           const blob = await downloadFile(files[i].id, files[i].mimeType);
-          if (blob.type && !blob.type.includes('pdf')) {
+          if (files[i].isLocal && blob.type && !blob.type.includes('pdf')) {
+            showToast(`Skipped ${files[i].name}: local Office files must be uploaded to Drive first`, 'warning');
+            continue;
+          }
+          if (!files[i].isLocal && blob.type && !blob.type.includes('pdf')) {
             showToast(`Skipped ${files[i].name}: not a convertible document`, 'warning');
             continue;
           }
@@ -794,7 +923,278 @@ const App = (() => {
     }, 4000);
   }
 
-  document.addEventListener('DOMContentLoaded', initAuth);
+  function initKeyboardShortcuts() {
+    document.addEventListener('keydown', handleKeyDown);
+  }
+
+  function handleKeyDown(e) {
+    if (state.printing) return;
+
+    if ($('context-menu') && !$('context-menu').classList.contains('hidden')) {
+      if (e.key === 'Escape') { hideContextMenu(); e.preventDefault(); }
+      return;
+    }
+
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') return;
+    if (e.target.tagName === 'SELECT') return;
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault();
+      toggleSelectAll();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      e.preventDefault();
+      if (state.selectedIds.size > 0) startBatchPrint();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      if (state.selectedIds.size > 0) {
+        state.selectedIds.clear();
+        recalcLastSelected();
+        renderFileList();
+        updateSelectionUI();
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      navigateKeyboard(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
+    if (e.key === 'Enter' && state.keyboardFocusIndex >= 0) {
+      e.preventDefault();
+      activateFocusedFile();
+      return;
+    }
+
+    if (e.key === 'Backspace' && !e.target.closest('input')) {
+      e.preventDefault();
+      navigateUp();
+      return;
+    }
+  }
+
+  function navigateKeyboard(direction) {
+    const allItems = state.filteredFiles;
+    if (allItems.length === 0) return;
+    if (state.keyboardFocusIndex < 0) {
+      state.keyboardFocusIndex = direction > 0 ? 0 : allItems.length - 1;
+    } else {
+      state.keyboardFocusIndex += direction;
+      if (state.keyboardFocusIndex < 0) state.keyboardFocusIndex = 0;
+      if (state.keyboardFocusIndex >= allItems.length) state.keyboardFocusIndex = allItems.length - 1;
+    }
+    renderFileList();
+    const focused = document.querySelector('.file-card.keyboard-focus');
+    if (focused) focused.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function activateFocusedFile() {
+    const file = state.filteredFiles[state.keyboardFocusIndex];
+    if (!file) return;
+    if (file.mimeType === FOLDER) {
+      navigateTo(file.id, file.name);
+    } else if (isPrintable(file.mimeType)) {
+      toggleFile(file.id);
+    }
+  }
+
+  function navigateUp() {
+    if (state.breadcrumbs.length > 1) {
+      const parent = state.breadcrumbs[state.breadcrumbs.length - 2];
+      navigateTo(parent.id, parent.name);
+    }
+  }
+
+  function showContextMenu(e, fileId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = [...state.files, ...state.localFiles].find(f => f.id === fileId);
+    if (!file) return;
+    state.contextMenuFile = file;
+
+    const menu = $('context-menu');
+    const isFolder = file.mimeType === FOLDER;
+    const isSelected = state.selectedIds.has(fileId);
+    const isLocal = file.isLocal;
+
+    let items = '';
+    if (!isFolder) {
+      items += `<div class="context-menu-item" onclick="App.contextAction('preview')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Preview
+      </div>`;
+      items += `<div class="context-menu-item" onclick="App.contextAction('print')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print this file
+      </div>`;
+    }
+    if (!isLocal && !isFolder) {
+      items += `<div class="context-menu-item" onclick="App.contextAction('open-drive')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open in Drive
+      </div>`;
+    }
+    if (!isFolder) {
+      items += `<div class="context-menu-sep"></div>`;
+      items += `<div class="context-menu-item" onclick="App.contextAction('toggle-select')">${isSelected ? 'Deselect' : 'Select'}</div>`;
+    }
+
+    menu.innerHTML = items;
+    menu.classList.remove('hidden');
+
+    requestAnimationFrame(() => {
+      const x = e.clientX;
+      const y = e.clientY;
+      menu.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+      menu.style.top = Math.min(y, window.innerHeight - 200) + 'px';
+    });
+  }
+
+  function hideContextMenu() {
+    $('context-menu').classList.add('hidden');
+    state.contextMenuFile = null;
+  }
+
+  async function contextAction(action) {
+    const file = state.contextMenuFile;
+    hideContextMenu();
+    if (!file) return;
+
+    switch (action) {
+      case 'preview':
+        if (file.isLocal) {
+          const localUrl = URL.createObjectURL(file.localFile);
+          window.open(localUrl, '_blank');
+          setTimeout(() => URL.revokeObjectURL(localUrl), 60000);
+        } else if (file.mimeType === PDF) {
+          try {
+            const resp = await fetchWithAuth(`${DRIVE_API}/files/${file.id}?alt=media`);
+            const blob = await resp.blob();
+            const driveUrl = URL.createObjectURL(blob);
+            window.open(driveUrl, '_blank');
+            setTimeout(() => URL.revokeObjectURL(driveUrl), 60000);
+          } catch (err) {
+            showToast('Could not preview file', 'error');
+          }
+        } else {
+          window.open(`https://drive.google.com/file/d/${file.id}/view`, '_blank');
+        }
+        break;
+      case 'print':
+        state.selectedIds.clear();
+        state.selectedIds.add(file.id);
+        recalcLastSelected();
+        updateSelectionUI();
+        await startBatchPrint();
+        break;
+      case 'open-drive':
+        window.open(`https://drive.google.com/file/d/${file.id}/view`, '_blank');
+        break;
+      case 'toggle-select':
+        toggleFile(file.id);
+        break;
+    }
+  }
+
+  function initDragDrop() {
+    let dragCounter = 0;
+
+    document.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault();
+      dragCounter++;
+      if ($('main-app') && !$('main-app').classList.contains('hidden')) {
+        $('drop-overlay').classList.remove('hidden');
+      }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        $('drop-overlay').classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('dragover', (e) => { e.preventDefault(); });
+
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      $('drop-overlay').classList.add('hidden');
+      if ($('main-app').classList.contains('hidden')) return;
+      if (!e.dataTransfer.files.length) return;
+
+      const files = Array.from(e.dataTransfer.files);
+      const supported = files.filter(f => isSupportedLocalFile(f.name, f.type));
+
+      if (supported.length === 0) {
+        showToast('No supported file types (PDF, Word, Excel, PowerPoint)', 'warning');
+        return;
+      }
+
+      for (const file of supported) {
+        state.localFiles.push({
+          id: 'local-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          mimeType: file.type || guessMimeType(file.name),
+          size: file.size,
+          modifiedTime: new Date(file.lastModified).toISOString(),
+          isLocal: true,
+          localFile: file,
+        });
+      }
+
+      showToast(`Added ${supported.length} local file${supported.length !== 1 ? 's' : ''}`, 'success');
+      renderFileList();
+      updateSelectionUI();
+    });
+  }
+
+  function isSupportedLocalFile(name, type) {
+    const supportedTypes = [PDF, ...OFFICE_TYPES];
+    if (supportedTypes.includes(type)) return true;
+    const ext = name.split('.').pop().toLowerCase();
+    return ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
+  }
+
+  function guessMimeType(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const map = {
+      pdf: 'application/pdf',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      doc: 'application/msword',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls: 'application/vnd.ms-excel',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      ppt: 'application/vnd.ms-powerpoint',
+    };
+    return map[ext] || 'application/pdf';
+  }
+
+  function clearLocalFiles() {
+    state.localFiles.forEach(f => state.selectedIds.delete(f.id));
+    state.localFiles = [];
+    recalcLastSelected();
+    renderFileList();
+    updateSelectionUI();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    initAuth();
+    initKeyboardShortcuts();
+    initDragDrop();
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.context-menu')) hideContextMenu();
+    });
+  });
 
   return {
     signIn,
@@ -813,5 +1213,10 @@ const App = (() => {
     setFilter,
     sortBy,
     setPaperSize,
+    toggleTheme,
+    showContextMenu,
+    hideContextMenu,
+    contextAction,
+    clearLocalFiles,
   };
 })();
