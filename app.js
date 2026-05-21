@@ -49,6 +49,14 @@ const App = (() => {
     'application/vnd.ms-powerpoint',
   ];
 
+  const PAPER_SIZES = {
+    A4: { width: 595.28, height: 841.89 },
+    A3: { width: 841.89, height: 1190.55 },
+    letter: { width: 612, height: 792 },
+    legal: { width: 612, height: 1008 },
+    tabloid: { width: 792, height: 1224 },
+  };
+
   function isPrintable(mimeType) {
     return mimeType === PDF || EXPORTABLE.includes(mimeType) || OFFICE_TYPES.includes(mimeType);
   }
@@ -680,13 +688,34 @@ const App = (() => {
   async function mergePdfs(pdfItems) {
     const { PDFDocument } = PDFLib;
     const mergedPdf = await PDFDocument.create();
+    const target = PAPER_SIZES[state.paperSize] || PAPER_SIZES.A4;
+    const margin = 36;
 
     for (const item of pdfItems) {
       const arrayBuffer = await item.blob.arrayBuffer();
       try {
         const donorPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
-        const pages = await mergedPdf.copyPages(donorPdf, donorPdf.getPageIndices());
-        pages.forEach(page => mergedPdf.addPage(page));
+        for (const pageIndex of donorPdf.getPageIndices()) {
+          try {
+            const donorPage = donorPdf.getPage(pageIndex);
+            const embeddedPage = await mergedPdf.embedPage(donorPage);
+            const { width: srcW, height: srcH } = embeddedPage;
+
+            const usableW = target.width - margin * 2;
+            const usableH = target.height - margin * 2;
+            const scale = Math.min(usableW / srcW, usableH / srcH, 1);
+
+            const drawW = srcW * scale;
+            const drawH = srcH * scale;
+            const x = margin + (usableW - drawW) / 2;
+            const y = margin + (usableH - drawH) / 2;
+
+            const newPage = mergedPdf.addPage([target.width, target.height]);
+            newPage.drawPage(embeddedPage, { x, y, width: drawW, height: drawH });
+          } catch (e) {
+            console.warn(`Skipping unmergeable page ${pageIndex} of ${item.name}`, e);
+          }
+        }
       } catch (e) {
         console.warn(`Skipping unmergeable file: ${item.name}`, e);
       }
